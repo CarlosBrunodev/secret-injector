@@ -1,0 +1,62 @@
+{{ $fullname := include "dsv.fullname" . }}
+{{- if ne .Values.service.type "ExternalName" -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Chart.Name }}
+  labels:
+    {{- include "dsv.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "dsv.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "dsv.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          command: [{{ .Values.image.entrypoint }}]
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: cert
+              readOnly: true
+              mountPath: /home/nonroot/tls
+            - name: credentials
+              readOnly: true
+              mountPath: /home/nonroot/credentials
+          {{- with .Values.configmap }}
+          envFrom:
+            - configMapRef:
+                name: {{ $fullname }}-configmap
+          {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: credentials
+          secret:
+            secretName: {{ include "dsv.name" . }}-credentials
+        - name: cert
+          secret:
+            secretName: {{ include "dsv.name" . }}-tls
+{{- end -}}
